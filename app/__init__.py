@@ -1,4 +1,3 @@
-
 from flask import Flask
 from .routes.index import main
 from flask_sqlalchemy import SQLAlchemy
@@ -10,13 +9,13 @@ db = SQLAlchemy()
 migrate = Migrate()
 
 
-
 def create_app(config_name):
     app = Flask(__name__)
     app.config.from_object(config_name)
     db.init_app(app)
     migrate.init_app(app, db)
     return app
+
 
 app = create_app(Config)
 app.register_blueprint(main)
