@@ -13,3 +13,15 @@ def login():
     user = user.get(username)
     if user and user.password == password:
         return 'Logged in'
+    
+
+@auth.route('/register', methods=['POST'])
+def register():
+    username = request.form.get('username')
+    email = request.form.get('email')
+    password = request.form.get('password')
+    user = UserController(User)
+    user = user.create(username, email, password)
+    if user:
+        return 'Registered'
+    return 'Error'

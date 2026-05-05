@@ -1,17 +1,19 @@
 from app import db
-from app.models.user import User
+from app.models.user import User, UserCreateSchema
 
 class UserController:
     def __init__(self, user):
         self.user = user
     
     def create(self, username, email, password):
-        self.user.username = username
-        self.user.email = email
-        self.user.password = password
-        db.session.add(self.user)
+        try:
+            data = UserCreateSchema(username=username, email=email, password=password)
+        except Exception as e:
+            return None
+        user = self.user.from_schema(data)
+        db.session.add(user)
         db.session.commit()
-        return self.user
+        return user
     
     def get(self, id):
         return db.session.query(User).filter_by(id=id).first()
@@ -23,7 +25,6 @@ class UserController:
             user.email = email
             user.password = password
             db.session.commit()
-            return user
         return None
     
     def delete(self, id):
