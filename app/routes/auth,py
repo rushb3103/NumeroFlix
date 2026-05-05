@@ -1,0 +1,15 @@
+from flask import Blueprint
+from app.models.user import User
+from controllers.user import UserController
+from flask import request
+
+auth = Blueprint('auth', __name__)
+
+@auth.route('/login', methods=['POST'])
+def login():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    user = UserController(User)
+    user = user.get(username)
+    if user and user.password == password:
+        return 'Logged in'
