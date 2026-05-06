@@ -1,4 +1,4 @@
-from app import db
+from app.utils.db import db
 from app.models.user import User, UserCreateSchema
 
 
@@ -10,6 +10,8 @@ class UserController:
         try:
             data = UserCreateSchema(username=username, email=email, password=password)
         except Exception:
+            import traceback
+            traceback.print_exc()
             return None
         user = self.user.from_schema(data)
         db.session.add(user)

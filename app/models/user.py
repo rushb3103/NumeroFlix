@@ -1,4 +1,4 @@
-from app import db
+from app.utils.db import db
 from pydantic import BaseModel, EmailStr, field_validator, Field
 
 
