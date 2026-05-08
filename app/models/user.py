@@ -22,7 +22,7 @@ class User(db.Model):
 class UserCreateSchema(BaseModel):
     username: str = Field(min_length=4, max_length=32)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=6, max_length=128)
 
     @field_validator("username")
     def validate_username(cls, v):

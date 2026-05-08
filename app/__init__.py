@@ -4,6 +4,7 @@ from .routes.auth import auth
 from .utils.db import db
 from flask_migrate import Migrate
 from .config import Config
+from flask_bootstrap import Bootstrap5
 
 ## initialize app
 
@@ -19,6 +20,7 @@ def create_app(config_name):
 
 
 app = create_app(Config)
+bootstrap = Bootstrap5(app)
 app.register_blueprint(main)
 app.register_blueprint(auth, url_prefix='/auth')
 

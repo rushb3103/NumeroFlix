@@ -1,17 +1,10 @@
-<form action="/auth/register" method="post">
-    {{ form.csrf_token }}
-    <div class="form-group">
-        {{ form.username.label }}
-        {{ form.username(class="form-control") }}
-    </div>
-    <div class="form-group">
-        {{ form.email.label }}
-        {{ form.email(class="form-control") }}
-    </div>
-    <div class="form-group">
-        {{ form.password.label }}
-        {{ form.password(class="form-control") }}
-        
-    </div>
-    <button type="submit" class="btn btn-primary">Submit</button>
-</form>
+{% extends 'base.html' %}
+{% from 'bootstrap5/form.html' import render_form %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Register User</h2>
+    {# Render the form using Bootstrap-Flask #}
+    {{ render_form(form) }}
+</div>
+{% endblock %}

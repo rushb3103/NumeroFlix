@@ -7,12 +7,12 @@ class UserController:
         self.user = user
 
     def create(self, username, email, password):
-        try:
-            data = UserCreateSchema(username=username, email=email, password=password)
-        except Exception:
-            import traceback
-            traceback.print_exc()
-            return None
+        # try:
+        data = UserCreateSchema(username=username, email=email, password=password)
+        # except Exception:
+        #     import traceback
+        #     traceback.print_exc()
+        #     return None
         user = self.user.from_schema(data)
         db.session.add(user)
         db.session.commit()
