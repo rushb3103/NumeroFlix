@@ -10,13 +10,18 @@ auth = Blueprint('auth', __name__)
 
 @auth.route('/login', methods=['POST', "GET"])
 def login():
-    username = request.form.get('username')
-    password = request.form.get('password')
-    user = UserController(User)
-    user = user.get(username)
-    if user and user.password == password:
-        return 'Logged in'
-    
+    form = LoginForm()
+
+    if form.validate_on_submit():
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = UserController(User)
+        user = user.get(username)
+        if user and user.password == password:
+            flash(f'Validated User: {user.username}', 'success')
+        else:
+            flash('Invalid username or password', 'danger')
+    return render_template('login.html', form=form)
 
 @auth.route('/register', methods=['POST', "GET"])
 def register():

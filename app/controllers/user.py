@@ -18,8 +18,8 @@ class UserController:
         db.session.commit()
         return user
 
-    def get(self, id):
-        return db.session.query(User).filter_by(id=id).first()
+    def get(self, username):
+        return db.session.query(User).filter_by(username=username).first()
 
     def update(self, id, username, email, password):
         user = db.session.query(User).filter_by(id=id).first()
