@@ -1,10 +1,36 @@
 {% extends 'base.html' %}
-{% from 'bootstrap5/form.html' import render_form %}
+
+{% from 'bootstrap5/form.html' import render_field %}
 
 {% block content %}
 <div class="container mt-5">
-    <h2>Register User</h2>
-    {# Render the form using Bootstrap-Flask #}
-    {{ render_form(form) }}
+    <div class="row justify-content-center">
+        <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
+            <div class="card shadow-sm">
+                <div class="card-body p-5">
+                    <h2 class="card-title text-left mb-4">Register</h2>
+                    <form method="POST">
+                        {{ form.hidden_tag() }}
+
+                        {{ render_field(form.username) }}
+                        {{ render_field(form.email) }}
+                        {{ render_field(form.password) }}
+                        {{ render_field(form.confirm) }}
+
+                        <div class="d-grid">
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+
+                    <p class="text-center mt-3 mb-0">
+                        Alreqady have an account?
+                        <a href="{{ url_for('auth.login') }}">Sign In here</a>
+                    </p>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
