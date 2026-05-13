@@ -37,3 +37,9 @@ class UserController:
             db.session.commit()
             return user
         return None
+    
+    def check_password(self, username, password):
+        user = db.session.query(User).filter_by(username=username).first()
+        if user and user.check_password(password):
+            return user
+        return False

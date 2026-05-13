@@ -17,10 +17,11 @@ def login():
         password = request.form.get('password')
         user = UserController(User)
         user = user.get(username)
-        if user and user.password == password:
+        if user and user.check_password(password):
             flash(f'Validated User: {user.username}', 'success')
         else:
             flash('Invalid username or password', 'danger')
+
     return render_template('login.html', form=form)
 
 @auth.route('/register', methods=['POST', "GET"])
@@ -36,7 +37,7 @@ def register():
         try:
             
             user = user.create(username, email, password)
-            flash(f'Validated User: {user.username}', 'success')
+            flash(f'Registered User: {user.username}', 'success')
         except ValidationError as e:
             import traceback
             traceback.print_exc()
