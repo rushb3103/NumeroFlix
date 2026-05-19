@@ -1,6 +1,7 @@
 from flask import Flask
 from .routes.index import main
 from .routes.auth import auth
+from .routes.video import video
 from .utils.db import db
 from flask_migrate import Migrate
 from .config import Config
@@ -23,6 +24,7 @@ app = create_app(Config)
 bootstrap = Bootstrap5(app)
 app.register_blueprint(main)
 app.register_blueprint(auth, url_prefix='/auth')
+app.register_blueprint(video, url_prefix='/video')
 
 # db.create_all()
 ## run app
