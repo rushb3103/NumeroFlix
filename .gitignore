@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+.flaskenv
+
+# MovieVault local runtime
+.env
+.env.compose
+.runtime/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+backend/.venv/
+backend/data/
+frontend/node_modules/
+frontend/dist/

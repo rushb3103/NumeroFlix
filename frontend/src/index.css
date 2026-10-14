@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html { color-scheme: dark; }
+body { @apply m-0 min-h-screen bg-ink text-zinc-100 antialiased; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+button, input, select, textarea { @apply outline-none; }
+.control { @apply rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:border-zinc-500; }
+.button { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-white disabled:opacity-50; }
+.button-secondary { @apply button border border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800; }
+
