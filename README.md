@@ -43,6 +43,22 @@ Open `http://localhost:5173`. The API docs are at `http://127.0.0.1:8000/docs`.
 
 After dependencies are installed, `scripts/start-dev.ps1` and `scripts/stop-dev.ps1` start/stop both services in the background.
 
+## Docker Compose and Cloudflare Tunnel
+
+The container image builds the React UI and serves it from the FastAPI process on port 8000. Compose mounts the movie library read-only, keeps the database/artwork/cache in a named volume, and runs a remotely managed Cloudflare Tunnel alongside the app.
+
+1. In Cloudflare Zero Trust, create a remotely managed tunnel and add a public hostname whose service URL is `http://numeroflix:8000`.
+2. Copy `.env.compose.example` to `.env.compose`. Set `MOVIE_PATH`, `MASTER_PASSWORD`, and the tunnel token from Cloudflare. Keep this file private.
+3. Build and start the stack:
+
+   ```powershell
+   docker compose --env-file .env.compose up -d --build
+   ```
+
+4. Check the services with `docker compose --env-file .env.compose ps` and follow tunnel logs with `docker compose --env-file .env.compose logs -f cloudflared`.
+
+The app is also available only on the Docker host at `http://127.0.0.1:8000` by default. Change `APP_PORT` if needed. Stop the stack with `docker compose --env-file .env.compose down`; the `numeroflix-data` volume is retained.
+
 ## Tests and build
 
 ```powershell
@@ -62,5 +78,5 @@ NumeroFlix only discovers files beneath `MOVIE_ROOT` and opens media as binary r
 
 - Direct playback depends on browser container/codec support; HLS transcoding is not yet implemented.
 - TMDB matching is manual and optional; automatic filename matching is intentionally not implemented.
-- Authentication, multi-profile history, PostgreSQL deployment, Docker Compose, Cloudflare Tunnel, and background workers are future deployment work.
+- Multi-profile history, PostgreSQL deployment, and background workers are future deployment work.
 - Browser subtitle track discovery and grid bulk-selection controls are not yet implemented; individual tag assignment and the backend bulk-tag endpoint are available.

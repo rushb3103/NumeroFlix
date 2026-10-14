@@ -221,6 +221,7 @@ __marimo__/
 
 # MovieVault local runtime
 .env
+.env.compose
 .runtime/
 __pycache__/
 .pytest_cache/

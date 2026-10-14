@@ -17,13 +17,16 @@ class Settings(BaseSettings):
     ffmpeg_path: str = "ffmpeg"
     ffprobe_path: str = "ffprobe"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    frontend_dir: Path | None = None
 
     # Keep the new application isolated from any legacy root-level Flask .env file.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    @field_validator("movie_root", "artwork_dir", "cache_dir", mode="before")
+    @field_validator("movie_root", "artwork_dir", "cache_dir", "frontend_dir", mode="before")
     @classmethod
-    def expand_path(cls, value: str | Path) -> Path:
+    def expand_path(cls, value: str | Path | None) -> Path | None:
+        if value is None or value == "":
+            return None
         return Path(value).expanduser()
 
     @property

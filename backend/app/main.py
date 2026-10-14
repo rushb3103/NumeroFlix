@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -55,4 +55,16 @@ def health() -> dict[str, str]:
 
 settings.artwork_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/artwork", StaticFiles(directory=settings.artwork_dir), name="artwork")
+
+
+if settings.frontend_dir and settings.frontend_dir.is_dir():
+    frontend_dir = settings.frontend_dir.resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def serve_frontend(path: str) -> FileResponse:
+        """Serve built SPA assets and fall back to index.html for client routes."""
+        requested = (frontend_dir / path).resolve()
+        if requested.is_relative_to(frontend_dir) and requested.is_file():
+            return FileResponse(requested)
+        return FileResponse(frontend_dir / "index.html")
 

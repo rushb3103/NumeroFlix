@@ -1,0 +1,39 @@
+services:
+  numeroflix:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      MOVIE_ROOT: /movies
+      DATABASE_URL: sqlite:////app/backend/data/movies.db
+      ARTWORK_DIR: /app/backend/data/artwork
+      CACHE_DIR: /app/backend/data/cache
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      MASTER_PASSWORD: ${MASTER_PASSWORD:?Set MASTER_PASSWORD in .env.compose}
+      SESSION_HOURS: ${SESSION_HOURS:-12}
+      FFMPEG_PATH: ffmpeg
+      FFPROBE_PATH: ffprobe
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      FRONTEND_DIR: /app/frontend
+    volumes:
+      - type: bind
+        source: ${MOVIE_PATH:?Set MOVIE_PATH in .env.compose}
+        target: /movies
+        read_only: true
+      - numeroflix-data:/app/backend/data
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env.compose}
+    depends_on:
+      numeroflix:
+        condition: service_healthy
+
+volumes:
+  numeroflix-data:
