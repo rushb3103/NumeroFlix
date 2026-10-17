@@ -1,7 +1,8 @@
-import { Check, Heart, ListPlus, Play, Tag as TagIcon } from 'lucide-react'
+import { Heart, ListPlus, Play, Tag as TagIcon } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import api from '../services/api'
+import WatchProgressBar from '../components/WatchProgressBar'
 
 function durationLabel(seconds) {
   if (!seconds) return null
@@ -22,7 +23,7 @@ function sizeLabel(bytes) {
 function RelatedVideo({ movie }) {
   const artwork = movie.backdrop_path || movie.poster_path
   return <Link to={`/watch/${movie.id}`} className="group flex gap-2.5">
-    <div className="relative aspect-video w-40 shrink-0 overflow-hidden rounded-lg bg-zinc-900">{artwork ? <img src={`/artwork/${artwork}`} alt="" className="h-full w-full object-cover"/> : <div className="flex h-full items-center justify-center text-xs text-zinc-600">No thumbnail</div>}{movie.duration_seconds && <span className="absolute bottom-1 right-1 rounded bg-black/85 px-1 text-[10px]">{durationLabel(movie.duration_seconds)}</span>}</div>
+    <div className="relative aspect-video w-40 shrink-0 overflow-hidden rounded-lg bg-zinc-900">{artwork ? <img src={`/artwork/${artwork}`} alt="" className="h-full w-full object-cover"/> : <div className="flex h-full items-center justify-center text-xs text-zinc-600">No thumbnail</div>}{movie.duration_seconds && <span className="absolute bottom-1 right-1 rounded bg-black/85 px-1 text-[10px]">{durationLabel(movie.duration_seconds)}</span>}<WatchProgressBar movie={movie}/></div>
     <div className="min-w-0"><h3 className="line-clamp-2 text-sm font-semibold leading-5 group-hover:text-white">{movie.title}</h3><p className="mt-1 text-xs text-zinc-500">{[movie.release_year, movie.resolution].filter(Boolean).join(' • ') || 'NumeroFlix'}</p><p className="mt-1 text-xs text-zinc-600">{sizeLabel(movie.file_size)}</p></div>
   </Link>
 }
@@ -112,7 +113,7 @@ function WatchView({ id }) {
       <h1 className="mt-4 text-xl font-bold leading-7 md:text-2xl">{movie.title}</h1>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
         <div><p className="text-sm font-semibold">NumeroFlix Library</p><p className="text-xs text-zinc-500">{movie.relative_path}</p></div>
-        <div className="flex flex-wrap gap-2"><button onClick={() => patchMovie({ is_favorite: !movie.is_favorite })} className={`button-secondary rounded-full ${movie.is_favorite ? 'bg-zinc-700' : ''}`}><Heart size={17} fill={movie.is_favorite ? 'currentColor' : 'none'}/>{movie.is_favorite ? 'Favorited' : 'Favorite'}</button><button onClick={() => patchMovie({ is_watched: !movie.is_watched })} className={`button-secondary rounded-full ${movie.is_watched ? 'bg-zinc-700' : ''}`}><Check size={17}/>{movie.is_watched ? 'Watched' : 'Mark watched'}</button></div>
+        <div className="flex flex-wrap gap-2"><button onClick={() => patchMovie({ is_favorite: !movie.is_favorite })} className={`button-secondary rounded-full ${movie.is_favorite ? 'bg-zinc-700' : ''}`}><Heart size={17} fill={movie.is_favorite ? 'currentColor' : 'none'}/>{movie.is_favorite ? 'Favorited' : 'Favorite'}</button></div>
       </div>
 
       <section className="mt-4 rounded-xl bg-zinc-900 p-4 text-sm"><div className="flex flex-wrap gap-x-4 gap-y-1 font-semibold"><span>{movie.release_year || 'Unknown year'}</span><span>{durationLabel(movie.duration_seconds) || 'Duration analyzing…'}</span><span>{movie.resolution || 'Quality analyzing…'}</span><span>{sizeLabel(movie.file_size)}</span></div><p className="mt-3 whitespace-pre-wrap leading-6 text-zinc-300">{movie.description || 'No description has been added for this movie.'}</p><p className="mt-3 text-xs text-zinc-500">{[movie.video_codec, movie.audio_codec, movie.file_extension].filter(Boolean).join(' • ')}</p></section>

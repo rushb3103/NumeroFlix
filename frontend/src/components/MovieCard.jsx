@@ -1,5 +1,6 @@
 import { Heart, Play } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import WatchProgressBar from './WatchProgressBar'
 
 function formatDuration(seconds) {
   if (!seconds) return null
@@ -38,6 +39,7 @@ export default function MovieCard({ movie }) {
       {quality && <span className="absolute bottom-2 left-2 rounded bg-black/85 px-1.5 py-0.5 text-[11px] font-semibold text-white">{quality}</span>}
       {duration && <span className="absolute bottom-2 right-2 rounded bg-black/85 px-1.5 py-0.5 text-[11px] font-semibold text-white">{duration}</span>}
       {movie.is_favorite && <Heart className="absolute right-2 top-2 text-rose-400 drop-shadow" size={18} fill="currentColor"/>}
+      <WatchProgressBar movie={movie}/>
     </div>
     <h3 className="mt-3 line-clamp-2 text-sm font-semibold leading-5 group-hover:text-white">{movie.title}</h3>
     <p className="mt-1 text-xs text-zinc-500">{[movie.release_year, size].filter(Boolean).join(' • ') || 'Details unavailable'}</p>
