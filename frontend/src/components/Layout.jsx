@@ -37,7 +37,7 @@ export default function Layout({ children }) {
       <nav className="space-y-1">{nav.map(([to, Icon, label]) => <NavLink key={to} to={to} end={to === '/'} title={!expanded ? label : undefined} className={({ isActive }) => `flex items-center rounded-xl py-3 text-sm transition ${expanded ? 'gap-5 px-4' : 'justify-center px-2'} ${isActive ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'}`}><Icon size={20}/>{expanded && <span>{label}</span>}</NavLink>)}</nav>
     </aside>
 
-    <main className={`min-w-0 pt-16 transition-[padding] ${expanded ? 'md:pl-56' : 'md:pl-[72px]'}`}><div className="p-4 md:p-6">{children}</div></main>
+    <main className={`min-w-0 pb-20 pt-16 transition-[padding] md:pb-0 ${expanded ? 'md:pl-56' : 'md:pl-[72px]'}`}><div className="p-4 md:p-6">{children}</div></main>
 
     <nav className="fixed inset-x-0 bottom-0 z-40 flex justify-around border-t border-zinc-800 bg-ink/95 py-2 backdrop-blur md:hidden">{nav.map(([to, Icon, label]) => <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `flex min-w-16 flex-col items-center gap-1 text-[10px] ${isActive ? 'text-white' : 'text-zinc-500'}`}><Icon size={19}/>{label}</NavLink>)}</nav>
   </div>
