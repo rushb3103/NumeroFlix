@@ -6,7 +6,7 @@ from sqlalchemy import asc, desc, func
 from sqlmodel import Session, select
 
 from app.core.database import get_session
-from app.models import Movie, MovieTag, Tag, WatchProgress
+from app.models import CollectionMovie, Movie, MovieTag, Tag, WatchProgress
 from app.schemas import BulkTagUpdate, MovieUpdate, ProgressUpdate
 
 router = APIRouter(prefix="/movies", tags=["movies"])
@@ -26,6 +26,7 @@ def list_movies(
     search: str | None = None,
     tags: list[int] = Query(default=[]),
     genre: str | None = None,
+    category: int | None = None,
     year: int | None = None,
     watched: bool | None = None,
     favorite: bool | None = None,
@@ -40,6 +41,8 @@ def list_movies(
     filters = []
     if search:
         filters.append(Movie.title.ilike(f"%{search}%"))
+    if category is not None:
+        filters.append(Movie.id.in_(select(CollectionMovie.movie_id).where(CollectionMovie.collection_id == category)))
     if genre:
         filters.append(Movie.genres.ilike(f"%{genre}%"))
     if year is not None:
@@ -84,6 +87,8 @@ def update_movie(movie_id: int, payload: MovieUpdate, session: Session = Depends
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("thumbnail_seconds") is not None and movie.duration_seconds and changes["thumbnail_seconds"] >= movie.duration_seconds:
+        raise HTTPException(status_code=422, detail="Thumbnail timestamp must be within the video")
     for key, value in changes.items():
         setattr(movie, key, value)
     if any(key not in {"is_favorite", "is_watched"} for key in changes):

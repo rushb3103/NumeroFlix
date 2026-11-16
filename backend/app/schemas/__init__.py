@@ -32,6 +32,7 @@ class MovieUpdate(BaseModel):
     description: str | None = None
     release_year: int | None = Field(default=None, ge=1888, le=2200)
     genres: str | None = None
+    thumbnail_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     is_favorite: bool | None = None
     is_watched: bool | None = None
 

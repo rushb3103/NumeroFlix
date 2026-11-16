@@ -94,3 +94,49 @@ def test_movie_filter_requires_all_selected_tags(test_context):
     assert response.status_code == 200
     assert [item["title"] for item in response.json()["items"]] == ["Both"]
 
+
+
+def test_category_filter_and_thumbnail_timestamp(test_context):
+    client, session, _ = test_context
+    movie = Movie(title="Selected", relative_path="selected.mp4", duration_seconds=600)
+    other = Movie(title="Other", relative_path="other.mp4")
+    session.add_all([movie, other])
+    session.commit()
+    session.refresh(movie)
+    category = client.post("/api/collections", json={"name": "Favorites"}).json()
+    assert client.post(f"/api/collections/{category['id']}/movies", json={"movie_ids": [movie.id]}).status_code == 200
+    result = client.get("/api/movies", params={"category": category["id"]}).json()
+    assert [item["title"] for item in result["items"]] == ["Selected"]
+    assert client.patch(f"/api/movies/{movie.id}", json={"title": "Renamed", "thumbnail_seconds": 30}).status_code == 200
+    assert client.get(f"/api/movies/{movie.id}").json()["thumbnail_seconds"] == 30
+    assert client.patch(f"/api/movies/{movie.id}", json={"thumbnail_seconds": 600}).status_code == 422
+    assert client.patch(f"/api/movies/{movie.id}", json={"thumbnail_seconds": None}).json()["thumbnail_seconds"] is None
+
+
+def test_admin_video_upload_and_delete(test_context):
+    client, session, root = test_context
+    upload = client.post("/api/library/videos", files={"video": ("Example.2020.mp4", b"video bytes", "video/mp4")})
+    assert upload.status_code == 201
+    movie_id = upload.json()["id"]
+    assert (root / "Example.2020.mp4").read_bytes() == b"video bytes"
+    assert client.get(f"/api/movies/{movie_id}").json()["title"] == "Example"
+    assert client.post("/api/library/videos", files={"video": ("Example.2020.mp4", b"other", "video/mp4")}).status_code == 409
+    assert (root / "Example.2020.mp4").read_bytes() == b"video bytes"
+    assert client.delete(f"/api/library/videos/{movie_id}").status_code == 204
+    assert not (root / "Example.2020.mp4").exists()
+    assert client.get(f"/api/movies/{movie_id}").status_code == 404
+
+
+def test_admin_video_rejects_unsafe_filenames_and_paths(test_context):
+    client, session, root = test_context
+    assert client.post("/api/library/videos", files={"video": ("../escape.mp4", b"x", "video/mp4")}).status_code == 400
+    assert client.post("/api/library/videos", files={"video": ("bad.txt", b"x", "text/plain")}).status_code == 415
+    outside = root.parent / "outside.mp4"
+    outside.write_bytes(b"keep")
+    movie = Movie(title="Unsafe", relative_path="../outside.mp4")
+    session.add(movie)
+    session.commit()
+    session.refresh(movie)
+    assert client.delete(f"/api/library/videos/{movie.id}").status_code == 403
+    assert outside.read_bytes() == b"keep"
+    assert session.get(Movie, movie.id) is not None

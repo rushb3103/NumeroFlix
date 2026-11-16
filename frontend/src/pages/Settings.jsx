@@ -1,10 +1,12 @@
-import { RefreshCw, Square, Tag as TagIcon } from 'lucide-react'
+import { RefreshCw, Square } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import api from '../services/api'
+import AdminVideos from '../components/AdminVideos'
 
 export default function Settings() {
   const [status, setStatus] = useState(null)
   const [tags, setTags] = useState([])
+  const [categories, setCategories] = useState([])
   const [error, setError] = useState('')
 
   const loadStatus = () => api.get('/library/status').then(({ data }) => setStatus(data))
@@ -14,6 +16,7 @@ export default function Settings() {
     void Promise.all([
       refreshStatus(),
       api.get('/tags').then(({ data }) => setTags(data)),
+      api.get('/collections').then(({ data }) => setCategories(data)),
     ]).catch(() => setError('Could not load settings.'))
     const timer = setInterval(() => { void refreshStatus().catch(() => {}) }, 1000)
     return () => clearInterval(timer)
@@ -34,17 +37,22 @@ export default function Settings() {
     await api.post('/library/scan/cancel').catch(requestError => setError(requestError.response?.data?.detail || 'Could not cancel the scan.'))
   }
 
-  const createTag = async event => {
-    event.preventDefault()
+  const manage = async (kind, action, item) => {
     setError('')
-    const form = new FormData(event.currentTarget)
+    const label = kind === 'tags' ? 'tag' : 'category'
+    if (action === 'delete' && !window.confirm(`Delete ${item.name}? Its video assignments will be removed.`)) return
+    const name = action === 'delete' ? null : window.prompt(`${action === 'create' ? 'New' : 'Rename'} ${label}`, item?.name || '')
+    if (action !== 'delete' && !name?.trim()) return
     try {
-      const { data } = await api.post('/tags', { name: form.get('name'), color: form.get('color') })
-      setTags(current => [...current.filter(tag => tag.id !== data.id), data].sort((a, b) => a.name.localeCompare(b.name)))
-      event.currentTarget.reset()
-    } catch (requestError) {
-      setError(requestError.response?.data?.detail || 'Could not create the tag.')
-    }
+      if (action === 'delete') await api.delete(`/${kind}/${item.id}`)
+      else {
+        const payload = kind === 'tags' ? {name: name.trim(), color: item?.color || '#7c3aed'} : {name: name.trim(), description: item?.description || null}
+        if (action === 'create') await api.post(`/${kind}`, payload)
+        else await api.put(`/${kind}/${item.id}`, payload)
+      }
+      const {data} = await api.get(`/${kind}`)
+      if (kind === 'tags') setTags(data); else setCategories(data)
+    } catch (requestError) { setError(requestError.response?.data?.detail || `Could not update ${label}.`) }
   }
 
   const scanState = status?.scan
@@ -59,7 +67,7 @@ export default function Settings() {
       {scanState?.error && <p className="mt-4 text-sm text-red-400">{scanState.error}</p>}
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">{Object.entries(status?.statistics || {}).map(([key, value]) => <div key={key} className="rounded-lg bg-zinc-900 p-4"><strong className="text-xl">{value}</strong><p className="mt-1 text-xs capitalize text-zinc-500">{key}</p></div>)}</div>
     </section>
-    <section className="mt-6 rounded-xl border border-zinc-800 bg-panel p-6"><h2 className="flex items-center gap-2 font-semibold"><TagIcon size={18}/>Custom tags</h2><form onSubmit={createTag} className="mt-4 flex gap-2"><input required name="name" className="control flex-1" placeholder="Tag name"/><input name="color" type="color" defaultValue="#7c3aed" className="h-10 w-12 rounded bg-transparent"/><button className="button">Add tag</button></form><div className="mt-4 flex flex-wrap gap-2">{tags.map(tag => <span key={tag.id} style={{ borderColor: tag.color }} className="rounded-full border px-3 py-1 text-sm">{tag.name}</span>)}</div></section>
-    <section className="mt-6 rounded-xl border border-zinc-800 bg-panel p-6"><h2 className="font-semibold">Metadata & media</h2><p className="mt-2 text-sm leading-6 text-zinc-500">File size and filename quality are available immediately. Duration, codecs, and exact resolution are inspected lazily with ffprobe when a movie is opened, keeping remote-vault scans lightweight.</p></section>
+    <AdminVideos/>
+    {[['collections', 'Categories', categories], ['tags', 'Tags', tags]].map(([kind, label, items]) => <section key={kind} className="mt-6 rounded-xl border border-zinc-800 bg-panel p-6"><div className="flex items-center justify-between"><h2 className="font-semibold">{label}</h2><button className="button-secondary" onClick={() => manage(kind, 'create')}>Add {kind === 'tags' ? 'tag' : 'category'}</button></div><div className="mt-4 divide-y divide-zinc-800">{items.map(item => <div key={item.id} className="flex items-center gap-3 py-3"><span className="min-w-0 flex-1 truncate">{item.name}</span><button className="text-sm text-zinc-400 hover:text-white" onClick={() => manage(kind, 'edit', item)}>Rename</button><button className="text-sm text-red-400 hover:text-red-300" onClick={() => manage(kind, 'delete', item)}>Delete</button></div>)}{!items.length && <p className="text-sm text-zinc-500">None yet.</p>}</div></section>)}
   </div>
 }

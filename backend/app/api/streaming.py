@@ -1,9 +1,10 @@
 import mimetypes
 import re
+import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 
@@ -87,3 +88,20 @@ def stream_movie(
         return Response(status_code=200, media_type=mime, headers=headers)
     return StreamingResponse(read_chunks(path, 0, size), media_type=mime, headers=headers)
 
+
+
+@router.get("/{movie_id}/frame")
+def movie_frame(movie_id: int, at: float = Query(ge=0, allow_inf_nan=False), session: Session = Depends(get_session), settings: Settings = Depends(get_settings)):
+    movie, path = resolve(movie_id, session, settings)
+    if movie.duration_seconds and at >= movie.duration_seconds:
+        raise HTTPException(status_code=422, detail="Timestamp must be within the video")
+    try:
+        result = subprocess.run(
+            [settings.ffmpeg_path, "-v", "error", "-ss", str(at), "-i", str(path), "-frames:v", "1", "-vf", "scale=640:-2", "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1"],
+            capture_output=True, timeout=30, check=True,
+        )
+        if not result.stdout:
+            raise ValueError("No frame found")
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail="Could not generate frame. Check FFmpeg and the video file.") from exc
+    return Response(content=result.stdout, media_type="image/jpeg", headers={"Cache-Control": "private, no-store"})

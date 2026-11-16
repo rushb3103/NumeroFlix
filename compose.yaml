@@ -20,7 +20,7 @@ services:
       - type: bind
         source: ${MOVIE_PATH:?Set MOVIE_PATH in .env.compose}
         target: /movies
-        read_only: true
+        read_only: false
       - numeroflix-data:/app/backend/data
     ports:
       - "127.0.0.1:${APP_PORT:-8000}:8000"

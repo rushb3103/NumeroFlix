@@ -8,9 +8,13 @@ import Library from './pages/Library'
 import Settings from './pages/Settings'
 import Watch from './pages/Watch'
 import api from './services/api'
+import EditMovie from './pages/EditMovie'
+
+import { AdminContext } from './AdminContext'
 
 export default function App() {
   const [auth, setAuth] = useState(null)
+  const [admin, setAdmin] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -30,5 +34,5 @@ export default function App() {
     return <LoginScreen onAuthenticated={() => setAuth({ required: true, authenticated: true })}/>
   }
 
-  return <Layout><Routes><Route path="/" element={<Dashboard/>}/><Route path="/library" element={<Library/>}/><Route path="/collections" element={<Collections/>}/><Route path="/settings" element={<Settings/>}/><Route path="/watch/:id" element={<Watch/>}/><Route path="/movies/:id" element={<Watch/>}/><Route path="/movies/:id/play" element={<Watch/>}/></Routes></Layout>
+  return <AdminContext.Provider value={admin}><Layout admin={admin} setAdmin={setAdmin}><Routes><Route path="/" element={<Dashboard/>}/><Route path="/library" element={<Library/>}/><Route path="/collections" element={<Collections/>}/>{admin && <><Route path="/settings" element={<Settings/>}/><Route path="/movies/:id/edit" element={<EditMovie/>}/></>}<Route path="/watch/:id" element={<Watch/>}/><Route path="/movies/:id" element={<Watch/>}/><Route path="/movies/:id/play" element={<Watch/>}/></Routes></Layout></AdminContext.Provider>
 }

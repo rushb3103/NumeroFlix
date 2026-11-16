@@ -27,7 +27,7 @@ function formatQuality(resolution) {
 
 export default function MovieCard({ movie }) {
   const artworkPath = movie.backdrop_path || movie.poster_path
-  const artwork = artworkPath ? `/artwork/${artworkPath}` : null
+  const artwork = movie.thumbnail_seconds != null ? `/api/movies/${movie.id}/frame?at=${movie.thumbnail_seconds}` : artworkPath ? `/artwork/${artworkPath}` : null
   const duration = formatDuration(movie.duration_seconds)
   const quality = formatQuality(movie.resolution)
   const size = formatSize(movie.file_size)

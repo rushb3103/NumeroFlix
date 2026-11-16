@@ -36,6 +36,7 @@ class Movie(SQLModel, table=True):
     resolution: str | None = Field(default=None, max_length=40)
     poster_path: str | None = Field(default=None, max_length=1200)
     backdrop_path: str | None = Field(default=None, max_length=1200)
+    thumbnail_seconds: float | None = None
     tmdb_id: int | None = Field(default=None, index=True)
     genres: str | None = Field(default=None, max_length=500)
     metadata_edited: bool = False
