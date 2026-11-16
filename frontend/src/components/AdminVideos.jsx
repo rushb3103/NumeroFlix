@@ -24,15 +24,28 @@ export default function AdminVideos() {
   const upload = async event => {
     event.preventDefault()
     if (!file) return
+    if (!file.size) { setError('Choose a video file that is not empty.'); return }
     setBusy(true); setProgress(0); setError(''); setNotice('')
-    const data = new FormData()
-    data.append('video', file)
+    const form = event.currentTarget
+    let uploadId = null
     try {
-      const response = await api.post('/library/videos', data, {timeout: 0, onUploadProgress: event => { if (event.total) setProgress(Math.round(event.loaded * 100 / event.total)) }})
-      setNotice(`Added ${response.data.title}.`); setFile(null); event.target.reset(); setPage(1); setRevision(value => value + 1)
-    } catch (err) { setError(err.response?.data?.detail || 'Could not upload the video.') }
-    finally { setBusy(false); setProgress(null) }
+      const {data} = await api.post('/library/uploads', {filename: file.name, size: file.size})
+      uploadId = data.id
+      for (let offset = 0; offset < file.size; offset += data.chunk_size) {
+        const part = file.slice(offset, Math.min(offset + data.chunk_size, file.size))
+        await api.put(`/library/uploads/${uploadId}`, part, {params: {offset}, timeout: 0, headers: {'Content-Type': 'application/octet-stream'}, onUploadProgress: progressEvent => setProgress(Math.min(99, Math.round((offset + progressEvent.loaded) * 100 / file.size)))})
+      }
+      setProgress(100)
+      const response = await api.post(`/library/uploads/${uploadId}/complete`, null, {timeout: 0})
+      uploadId = null
+      setNotice(`Added ${response.data.title}.`); setFile(null); form.reset(); setPage(1); setRevision(value => value + 1)
+    } catch (err) {
+      if (uploadId) await api.delete(`/library/uploads/${uploadId}`).catch(() => {})
+      const detail = err.response?.data?.detail
+      setError(err.response?.status === 413 ? 'Upload request is too large for the connection.' : typeof detail === 'string' ? detail : 'Could not upload the video. Check your connection and try again.')
+    } finally { setBusy(false); setProgress(null) }
   }
+
   const remove = async movie => {
     if (!window.confirm(`Permanently delete "${movie.title}"?\n\nThis deletes the source file from your library and removes its catalog entry. This cannot be undone.`)) return
     setBusy(true); setError(''); setNotice('')

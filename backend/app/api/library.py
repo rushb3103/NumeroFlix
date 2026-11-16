@@ -1,7 +1,11 @@
+import json
 import threading
+import time
+from uuid import UUID, uuid4
 from pathlib import Path
 
-from fastapi import File, UploadFile
+from fastapi import Body, File, UploadFile
+from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -196,3 +200,100 @@ def delete_video(movie_id: int, session: Session = Depends(get_session), setting
             raise HTTPException(status_code=500, detail="The file was deleted, but its catalog entry could not be removed. Run a scan.") from exc
     finally:
         _lock.release()
+
+
+# Chunks are staged outside the movie root so scans never index incomplete files.
+CHUNK_SIZE = 8 * 1024 * 1024
+UPLOAD_TTL = 24 * 60 * 60
+_upload_lock = threading.Lock()
+
+
+class UploadStart(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(gt=0)
+
+
+def _upload_paths(settings: Settings, upload_id: UUID) -> tuple[Path, Path]:
+    directory = settings.cache_dir / "uploads"
+    return directory / f"{upload_id}.json", directory / f"{upload_id}.part"
+
+
+def _upload_info(settings: Settings, upload_id: UUID) -> tuple[dict, Path, Path]:
+    meta, data = _upload_paths(settings, upload_id)
+    try:
+        info = json.loads(meta.read_text(encoding="utf-8"))
+        if not data.is_file():
+            raise FileNotFoundError
+        return info, meta, data
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="Upload not found or expired") from exc
+
+
+@router.post("/uploads", status_code=201)
+def start_upload(payload: UploadStart, settings: Settings = Depends(get_settings)) -> dict:
+    name = payload.filename
+    if name in {".", ".."} or "/" in name or "\\" in name or ":" in name or any(ord(c) < 32 for c in name):
+        raise HTTPException(status_code=400, detail="Invalid video filename")
+    if Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(status_code=415, detail="Choose an MP4, MKV, AVI, MOV, WebM, or M4V video")
+    if not settings.movie_root.is_dir():
+        raise HTTPException(status_code=503, detail="Library storage is unavailable")
+    upload_id = uuid4()
+    meta, data = _upload_paths(settings, upload_id)
+    with _upload_lock:
+        meta.parent.mkdir(parents=True, exist_ok=True)
+        # Remove abandoned staging files on a later visit; active uploads touch the metadata.
+        for old in meta.parent.glob("*.json"):
+            try:
+                if time.time() - old.stat().st_mtime > UPLOAD_TTL:
+                    old.with_suffix(".part").unlink(missing_ok=True)
+                    old.unlink(missing_ok=True)
+            except OSError:
+                continue
+        try:
+            data.touch(exist_ok=False)
+            meta.write_text(json.dumps(payload.model_dump()), encoding="utf-8")
+        except OSError as exc:
+            data.unlink(missing_ok=True)
+            raise HTTPException(status_code=503, detail="Could not prepare upload storage") from exc
+    return {"id": str(upload_id), "chunk_size": CHUNK_SIZE}
+
+
+@router.put("/uploads/{upload_id}")
+def upload_chunk(upload_id: UUID, offset: int, chunk: bytes = Body(media_type="application/octet-stream"), settings: Settings = Depends(get_settings)) -> dict:
+    with _upload_lock:
+        info, meta, data = _upload_info(settings, upload_id)
+        current = data.stat().st_size
+        if offset != current:
+            raise HTTPException(status_code=409, detail=f"Expected upload offset {current}")
+        if not chunk or len(chunk) > CHUNK_SIZE or current + len(chunk) > info["size"]:
+            raise HTTPException(status_code=400, detail="Invalid upload chunk size")
+        try:
+            with data.open("ab") as output:
+                output.write(chunk)
+            meta.touch()
+        except OSError as exc:
+            raise HTTPException(status_code=507, detail="Could not store upload chunk; check disk space") from exc
+        return {"received": current + len(chunk)}
+
+
+@router.post("/uploads/{upload_id}/complete", status_code=201)
+def complete_upload(upload_id: UUID, session: Session = Depends(get_session), settings: Settings = Depends(get_settings)) -> dict:
+    with _upload_lock:
+        info, meta, data = _upload_info(settings, upload_id)
+        if data.stat().st_size != info["size"]:
+            raise HTTPException(status_code=409, detail="Upload is incomplete")
+        # Existing upload logic performs exclusive creation and indexes the finished file.
+        with data.open("rb") as source:
+            result = upload_video(UploadFile(filename=info["filename"], file=source), session, settings)
+        data.unlink(missing_ok=True)
+        meta.unlink(missing_ok=True)
+        return result
+
+
+@router.delete("/uploads/{upload_id}", status_code=204)
+def cancel_upload(upload_id: UUID, settings: Settings = Depends(get_settings)):
+    with _upload_lock:
+        meta, data = _upload_paths(settings, upload_id)
+        data.unlink(missing_ok=True)
+        meta.unlink(missing_ok=True)

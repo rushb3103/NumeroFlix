@@ -140,3 +140,22 @@ def test_admin_video_rejects_unsafe_filenames_and_paths(test_context):
     assert client.delete(f"/api/library/videos/{movie.id}").status_code == 403
     assert outside.read_bytes() == b"keep"
     assert session.get(Movie, movie.id) is not None
+
+
+def test_chunked_video_upload_and_cleanup(test_context):
+    client, _, root = test_context
+    start = client.post('/api/library/uploads', json={'filename': 'chunks.mp4', 'size': 6})
+    assert start.status_code == 201
+    upload_id = start.json()['id']
+    headers = {'Content-Type': 'application/octet-stream'}
+    assert client.put(f'/api/library/uploads/{upload_id}?offset=0', content=b'abc', headers=headers).json()['received'] == 3
+    assert client.put(f'/api/library/uploads/{upload_id}?offset=0', content=b'def', headers=headers).status_code == 409
+    assert client.post(f'/api/library/uploads/{upload_id}/complete').status_code == 409
+    assert client.put(f'/api/library/uploads/{upload_id}?offset=3', content=b'def', headers=headers).status_code == 200
+    complete = client.post(f'/api/library/uploads/{upload_id}/complete')
+    assert complete.status_code == 201
+    assert (root / 'chunks.mp4').read_bytes() == b'abcdef'
+    assert client.post(f'/api/library/uploads/{upload_id}/complete').status_code == 404
+    cancelled = client.post('/api/library/uploads', json={'filename': 'cancel.mp4', 'size': 1}).json()['id']
+    assert client.delete(f'/api/library/uploads/{cancelled}').status_code == 204
+    assert client.put(f'/api/library/uploads/{cancelled}?offset=0', content=b'x', headers=headers).status_code == 404

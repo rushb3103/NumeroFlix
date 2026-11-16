@@ -86,3 +86,5 @@ Scanning and streaming read files beneath `MOVIE_ROOT`. Admin uploads create fil
 Turn on **Admin** in the header to scan the library, manage categories and tags, upload or delete videos, and edit a video from its watch page. Existing collections appear as categories. The switch changes the interface; it is not a separate security boundary. Configure the master password to restrict access.
 
 After updating an existing installation, run `uv run alembic upgrade head` in `backend` before starting the API. FFmpeg and ffprobe must be installed and available on the server (or configured via `FFMPEG_PATH` and `FFPROBE_PATH`). The editor generates 20 evenly spaced frames on demand; thumbnail images are generated from the saved timestamp and are not stored.
+
+Video uploads use 8 MiB chunks to work through Cloudflare request limits. Incomplete uploads are staged in `CACHE_DIR/uploads` and removed on failure or after 24 hours when a new upload starts. Allow local disk space for the staged video and the rclone VFS cache; rclone may continue transferring data to B2 after NumeroFlix reports that the video was added.
