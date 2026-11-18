@@ -8,12 +8,12 @@ The earlier Flask prototype remains at the repository root for reference. The ac
 
 - FastAPI, SQLModel, SQLite, Alembic-compatible schema, and health endpoint
 - Incremental, cancellable, read-only recursive scanning for MP4, MKV, AVI, MOV, WebM, and M4V
-- Disconnected-storage handling; scans retain records and only mark missing entries unavailable after a complete scan
+- Completed scans remove missing catalog entries and their assignments. Cancelled or incomplete scans leave the catalog intact.
 - Paginated search, multi-tag/year/genre/watched/favorite filters, and sorting
 - Tag CRUD/bulk assignment, collection CRUD/membership, favorites, watched state, and playback progress
 - Optional master-password gate using an HttpOnly expiring session cookie
 - Secure movie-ID-based streaming with GET/HEAD, byte ranges, seeking headers, path containment, and symlink rejection
-- Lazy ffprobe inspection, optional TMDB search, and local custom poster uploads
+- File size and first-frame resolution recorded during scans, lazy ffprobe inspection, optional TMDB search, and local custom poster uploads
 - Responsive React/Vite/Tailwind UI with dashboard, library, details, collections, player, and settings
 - Scanner, API, path safety, range streaming, CRUD, search, and progress tests
 
@@ -83,8 +83,8 @@ Scanning and streaming read files beneath `MOVIE_ROOT`. Admin uploads create fil
 
 ## Admin mode and thumbnails
 
-Turn on **Admin** in the header to scan the library, manage categories and tags, upload or delete videos, and edit a video from its watch page. Existing collections appear as categories. The switch changes the interface; it is not a separate security boundary. Configure the master password to restrict access.
+Turn on **Admin** in the header to scan the library, manage categories and tags, upload or delete videos, and edit a video from its watch page. Open **Admin → Analytics** to see video counts and storage by category, tag, and first-frame resolution. Existing collections appear as categories. Configure the master password to restrict access.
 
-After updating an existing installation, run `uv run alembic upgrade head` in `backend` before starting the API. FFmpeg and ffprobe must be installed and available on the server (or configured via `FFMPEG_PATH` and `FFPROBE_PATH`). The editor generates 20 evenly spaced frames on demand; thumbnail images are generated from the saved timestamp and are not stored.
+After updating an existing installation, run `uv run alembic upgrade head` in `backend` before starting the API. Run **Scan library** to backfill dimensions and remove missing entries. FFmpeg and ffprobe must be installed and available on the server (or configured via `FFMPEG_PATH` and `FFPROBE_PATH`). Videos that FFmpeg cannot read appear under **Unknown** in the resolution breakdown. The editor generates 20 evenly spaced frames on demand; thumbnail images are generated from the saved timestamp.
 
 Video uploads use 8 MiB chunks to work through Cloudflare request limits. Incomplete uploads are staged in `CACHE_DIR/uploads` and removed on failure or after 24 hours when a new upload starts. Allow local disk space for the staged video and the rclone VFS cache; rclone may continue transferring data to B2 after NumeroFlix reports that the video was added.

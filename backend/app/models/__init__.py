@@ -34,6 +34,7 @@ class Movie(SQLModel, table=True):
     video_codec: str | None = Field(default=None, max_length=80)
     audio_codec: str | None = Field(default=None, max_length=80)
     resolution: str | None = Field(default=None, max_length=40)
+    first_frame_resolution: str | None = Field(default=None, max_length=40)
     poster_path: str | None = Field(default=None, max_length=1200)
     backdrop_path: str | None = Field(default=None, max_length=1200)
     thumbnail_seconds: float | None = None

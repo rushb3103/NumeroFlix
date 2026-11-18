@@ -29,7 +29,7 @@ export default function MovieCard({ movie }) {
   const artworkPath = movie.backdrop_path || movie.poster_path
   const artwork = movie.thumbnail_seconds != null ? `/api/movies/${movie.id}/frame?at=${movie.thumbnail_seconds}` : artworkPath ? `/artwork/${artworkPath}` : null
   const duration = formatDuration(movie.duration_seconds)
-  const quality = formatQuality(movie.resolution)
+  const quality = formatQuality(movie.first_frame_resolution || movie.resolution)
   const size = formatSize(movie.file_size)
   return <Link to={`/watch/${movie.id}`} className="group min-w-0">
     <div className="relative aspect-video overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg shadow-black/10">

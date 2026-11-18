@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import LoginScreen from './components/LoginScreen'
+import AdminAnalytics from './pages/AdminAnalytics'
 import Collections from './pages/Collections'
 import Dashboard from './pages/Dashboard'
 import Library from './pages/Library'
@@ -34,5 +35,22 @@ export default function App() {
     return <LoginScreen onAuthenticated={() => setAuth({ required: true, authenticated: true })}/>
   }
 
-  return <AdminContext.Provider value={admin}><Layout admin={admin} setAdmin={setAdmin}><Routes><Route path="/" element={<Dashboard/>}/><Route path="/library" element={<Library/>}/><Route path="/collections" element={<Collections/>}/>{admin && <><Route path="/settings" element={<Settings/>}/><Route path="/movies/:id/edit" element={<EditMovie/>}/></>}<Route path="/watch/:id" element={<Watch/>}/><Route path="/movies/:id" element={<Watch/>}/><Route path="/movies/:id/play" element={<Watch/>}/></Routes></Layout></AdminContext.Provider>
+  return <AdminContext.Provider value={admin}>
+    <Layout admin={admin} setAdmin={setAdmin}>
+      <Routes>
+        <Route path="/" element={<Dashboard/>}/>
+        <Route path="/library" element={<Library/>}/>
+        <Route path="/collections" element={<Collections/>}/>
+        {admin && <>
+          <Route path="/settings" element={<Settings/>}>
+            <Route path="analytics" element={<AdminAnalytics/>}/>
+          </Route>
+          <Route path="/movies/:id/edit" element={<EditMovie/>}/>
+        </>}
+        <Route path="/watch/:id" element={<Watch/>}/>
+        <Route path="/movies/:id" element={<Watch/>}/>
+        <Route path="/movies/:id/play" element={<Watch/>}/>
+      </Routes>
+    </Layout>
+  </AdminContext.Provider>
 }

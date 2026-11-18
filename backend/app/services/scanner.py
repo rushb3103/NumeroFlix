@@ -1,11 +1,16 @@
 import re
+import stat
 import threading
+from collections.abc import Iterator
 from datetime import datetime, timezone
+from os import stat_result
+from os.path import samestat
 from pathlib import Path
 
 from sqlmodel import Session, select
 
 from app.models import Movie, WatchProgress
+from app.services.media import first_frame_resolution
 
 SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
 
@@ -64,14 +69,54 @@ def _merge_duplicate(session: Session, canonical: Movie, duplicate: Movie) -> No
     session.delete(duplicate)
 
 
-def scan_library(session: Session, root: Path, cancel: threading.Event | None = None, progress=None) -> dict:
-    if not root.exists() or not root.is_dir():
+def _movie_paths(root: Path, cancel: threading.Event | None) -> Iterator[Path]:
+    def raise_walk_error(error: OSError) -> None:
+        raise error
+
+    for directory, subdirectories, filenames in root.walk(on_error=raise_walk_error):
+        if cancel and cancel.is_set():
+            return
+        subdirectories[:] = [name for name in subdirectories if not (directory / name).is_junction()]
+        for name in filenames:
+            path = directory / name
+            if path.suffix.lower() in SUPPORTED_EXTENSIONS:
+                yield path
+
+
+def scan_library(
+    session: Session, root: Path, cancel: threading.Event | None = None, progress=None, *, ffmpeg_path: str = "ffmpeg"
+) -> dict:
+    root_stat = root.stat()
+    if not stat.S_ISDIR(root_stat.st_mode):
         raise FileNotFoundError(f"Movie root is unavailable: {root}")
 
-    seen: set[str] = set()
-    discovered = updated = errors = processed = duplicates_removed = duplicates_skipped = 0
+    discovered = updated = removed = errors = processed = duplicates_removed = duplicates_skipped = 0
+    resolution_unavailable = 0
+
+    def result(cancelled: bool) -> dict:
+        return {
+            "cancelled": cancelled, "processed": processed, "discovered": discovered, "updated": updated,
+            "removed": removed, "duplicates_removed": duplicates_removed, "duplicates_skipped": duplicates_skipped,
+            "errors": errors, "resolution_unavailable": resolution_unavailable,
+        }
+
+    files: list[tuple[Path, str, stat_result]] = []
+    for path in _movie_paths(root, cancel):
+        if cancel and cancel.is_set():
+            return result(True)
+        try:
+            file_stat = path.lstat()
+        except FileNotFoundError:
+            errors += 1
+            continue
+        if stat.S_ISREG(file_stat.st_mode):
+            files.append((path, path.relative_to(root).as_posix(), file_stat))
+    if cancel and cancel.is_set():
+        return result(True)
+
     movies_by_key: dict[str, Movie] = {}
     movies_by_content: dict[tuple[str, int, int], Movie] = {}
+    catalog: list[Movie] = []
     for existing in session.exec(select(Movie).order_by(Movie.id)).all():
         key = normalized_path_key(existing.relative_path)
         identity = content_identity(existing.relative_path, existing.file_size, existing.file_mtime_ns)
@@ -81,85 +126,94 @@ def scan_library(session: Session, root: Path, cancel: threading.Event | None = 
             duplicates_removed += 1
             movies_by_key[key] = canonical
         else:
+            catalog.append(existing)
             movies_by_key[key] = existing
             movies_by_content[identity] = existing
     if duplicates_removed:
         session.flush()
 
-    files = (path for path in root.rglob("*") if path.is_file() and not path.is_symlink())
-    fallback_paths: dict[int, str] = {}
-    for path in files:
+    # Refresh known paths before matching copies by their stored size and mtime.
+    known_paths = {movie.relative_path for movie in catalog}
+    files.sort(key=lambda entry: (entry[1] not in known_paths, normalized_path_key(entry[1]) not in movies_by_key))
+    matched: set[int] = set()
+    for path, relative, file_stat in files:
         if cancel and cancel.is_set():
-            return {"cancelled": True, "processed": processed, "discovered": discovered, "updated": updated, "duplicates_removed": duplicates_removed, "duplicates_skipped": duplicates_skipped, "errors": errors}
-        if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-            continue
-        try:
-            stat = path.stat()
-            relative = path.relative_to(root).as_posix()
-            key = normalized_path_key(relative)
-            seen.add(key)
-            movie = movies_by_key.get(key)
-            action = "checked"
-            if movie is None:
-                identity = content_identity(relative, stat.st_size, stat.st_mtime_ns)
-                duplicate_of = movies_by_content.get(identity)
-                if duplicate_of:
-                    movies_by_key[key] = duplicate_of
-                    fallback_paths.setdefault(id(duplicate_of), relative)
-                    duplicates_skipped += 1
-                    processed += 1
-                    if progress:
-                        progress(relative, processed, "duplicate")
-                    continue
-                title, year = title_from_filename(path)
-                movie = Movie(
-                    title=title,
-                    release_year=year,
-                    relative_path=relative,
-                    file_size=stat.st_size,
-                    file_mtime_ns=stat.st_mtime_ns,
-                    file_extension=path.suffix.lower(),
-                    resolution=resolution_from_filename(path),
-                )
-                session.add(movie)
-                movies_by_key[key] = movie
+            session.rollback()
+            return result(True)
+        key = normalized_path_key(relative)
+        identity = content_identity(relative, file_stat.st_size, file_stat.st_mtime_ns)
+        movie = movies_by_key.get(key)
+        if movie is None or normalized_path_key(movie.relative_path) != key:
+            movie = movies_by_content.get(identity)
+        action = "checked"
+        if movie is None:
+            title, year = title_from_filename(path)
+            movie = Movie(
+                title=title,
+                release_year=year,
+                relative_path=relative,
+                file_size=file_stat.st_size,
+                file_mtime_ns=file_stat.st_mtime_ns,
+                file_extension=path.suffix.lower(),
+                resolution=resolution_from_filename(path),
+                first_frame_resolution=first_frame_resolution(path, ffmpeg_path),
+            )
+            session.add(movie)
+            movies_by_key[key] = movie
+            movies_by_content[identity] = movie
+            discovered += 1
+            action = "added"
+        elif id(movie) in matched:
+            duplicates_skipped += 1
+            action = "duplicate"
+        else:
+            previous_identity = content_identity(movie.relative_path, movie.file_size, movie.file_mtime_ns)
+            changed = previous_identity != identity
+            if changed:
+                if movies_by_content.get(previous_identity) is movie:
+                    del movies_by_content[previous_identity]
                 movies_by_content[identity] = movie
-                discovered += 1
-                action = "added"
-            else:
-                if normalized_path_key(movie.relative_path) != key:
-                    fallback_paths.setdefault(id(movie), relative)
-                if not movie.resolution:
-                    movie.resolution = resolution_from_filename(path)
-                if movie.file_size != stat.st_size or movie.file_mtime_ns != stat.st_mtime_ns or not movie.is_available:
-                    movie.file_size = stat.st_size
-                    movie.file_mtime_ns = stat.st_mtime_ns
-                    movie.is_available = True
-                    movie.updated_at = datetime.now(timezone.utc)
-                    session.add(movie)
-                    updated += 1
-                    action = "updated"
-            processed += 1
-            if progress:
-                progress(relative, processed, action)
-        except OSError:
-            errors += 1
+                movie.file_size = file_stat.st_size
+                movie.file_mtime_ns = file_stat.st_mtime_ns
+                movie.resolution = resolution_from_filename(path)
+                movie.duration_seconds = movie.video_codec = movie.audio_codec = None
+            dimensions = movie.first_frame_resolution
+            if changed or dimensions is None:
+                dimensions = first_frame_resolution(path, ffmpeg_path)
+            if (
+                changed or relative != movie.relative_path
+                or dimensions != movie.first_frame_resolution or not movie.is_available
+            ):
+                # An identical live copy can take over the entry and its assignments.
+                movie.relative_path = relative
+                movies_by_key[key] = movie
+                movie.first_frame_resolution = dimensions
+                movie.is_available = True
+                movie.updated_at = datetime.now(timezone.utc)
+                updated += 1
+                action = "updated"
+        if action != "duplicate":
+            matched.add(id(movie))
+            if movie.first_frame_resolution is None:
+                resolution_unavailable += 1
+        processed += 1
+        if progress:
+            progress(relative, processed, action)
 
-    # If the chosen copy disappeared but another identical copy remains, switch
-    # the catalog record to that live path. Source files are never modified.
-    unique_movies = list({id(movie): movie for movie in movies_by_key.values()}.values())
-    for movie in unique_movies:
-        if normalized_path_key(movie.relative_path) not in seen and id(movie) in fallback_paths:
-            movie.relative_path = fallback_paths[id(movie)]
-            session.add(movie)
+    if cancel and cancel.is_set():
+        session.rollback()
+        return result(True)
+    for movie in catalog:
+        if id(movie) not in matched:
+            session.delete(movie)
+            removed += 1
 
-    # Only reached after a complete successful traversal: preserve records, mark missing files unavailable.
-    for movie in unique_movies:
-        if normalized_path_key(movie.relative_path) not in seen and movie.is_available:
-            movie.is_available = False
-            movie.updated_at = datetime.now(timezone.utc)
-            session.add(movie)
-            updated += 1
+    if cancel and cancel.is_set():
+        session.rollback()
+        return result(True)
+    if not samestat(root_stat, root.stat()):
+        session.rollback()
+        raise OSError(f"Movie root changed during the scan: {root}")
     session.commit()
-    return {"cancelled": False, "processed": processed, "discovered": discovered, "updated": updated, "duplicates_removed": duplicates_removed, "duplicates_skipped": duplicates_skipped, "errors": errors}
+    return result(False)
 

@@ -13,7 +13,8 @@ from sqlmodel import Session, func, select
 
 from app.core.config import Settings, get_settings
 from app.core.database import engine, get_session
-from app.models import Collection, Movie, WatchProgress
+from app.models import Collection, CollectionMovie, Movie, MovieTag, Tag, WatchProgress
+from app.services.media import first_frame_resolution
 from app.services.paths import safe_movie_path
 from app.services.scanner import SUPPORTED_EXTENSIONS, resolution_from_filename, scan_library, title_from_filename
 
@@ -35,15 +36,13 @@ _state: dict = {
 
 
 def _run_scan(settings: Settings) -> None:
-    from sqlmodel import Session
-
     def report(relative_path: str, processed: int, action: str) -> None:
         events = [*_state.get("events", []), {"file": relative_path, "action": action, "processed": processed}]
         _state.update(current_file=relative_path, processed=processed, phase="discovering", events=events[-60:])
 
     try:
         with Session(engine) as session:
-            result = scan_library(session, settings.movie_root, _cancel, report)
+            result = scan_library(session, settings.movie_root, _cancel, report, ffmpeg_path=settings.ffmpeg_path)
         _state.update(
             status="cancelled" if result["cancelled"] else "complete",
             phase="cancelled" if result["cancelled"] else "complete",
@@ -101,6 +100,47 @@ def library_status(
     }
 
 
+@router.get("/analytics")
+def library_analytics(session: Session = Depends(get_session)) -> dict:
+    available = select(Movie.id, Movie.file_size, Movie.first_frame_resolution).where(Movie.is_available.is_(True)).subquery()
+    video_count = func.count(available.c.id)
+    size_bytes = func.coalesce(func.sum(available.c.file_size), 0)
+
+    def stats(row) -> dict:
+        identifier, name, count, size = row
+        return {"id": identifier, "name": name, "video_count": count, "size_bytes": size}
+
+    def breakdown(model, link, label_id, unassigned, unassigned_name):
+        groups = session.exec(
+            select(model.id, model.name, video_count, size_bytes)
+            .select_from(model)
+            .outerjoin(link, label_id == model.id)
+            .outerjoin(available, link.movie_id == available.c.id)
+            .group_by(model.id, model.name)
+            .order_by(size_bytes.desc(), model.name, model.id)
+        ).all()
+        count, size = session.exec(
+            select(func.count(Movie.id), func.coalesce(func.sum(Movie.file_size), 0))
+            .where(Movie.is_available.is_(True), unassigned)
+        ).one()
+        return [*(stats(row) for row in groups), stats((None, unassigned_name, count, size))]
+
+    resolution = available.c.first_frame_resolution
+    resolutions = [
+        stats((dimensions, dimensions or "Unknown", count, size))
+        for dimensions, count, size in session.exec(
+            select(resolution, video_count, size_bytes).group_by(resolution).order_by(size_bytes.desc(), resolution)
+        )
+    ]
+    return {
+        "total_videos": sum(item["video_count"] for item in resolutions),
+        "total_bytes": sum(item["size_bytes"] for item in resolutions),
+        "resolutions": resolutions,
+        "categories": breakdown(Collection, CollectionMovie, CollectionMovie.collection_id, ~Movie.collections.any(), "Uncategorized"),
+        "tags": breakdown(Tag, MovieTag, MovieTag.tag_id, ~Movie.tags.any(), "Untagged"),
+    }
+
+
 @router.get("/dashboard")
 def dashboard(session: Session = Depends(get_session)) -> dict:
     recent = session.exec(select(Movie).order_by(Movie.created_at.desc()).limit(12)).all()
@@ -117,6 +157,7 @@ def dashboard(session: Session = Depends(get_session)) -> dict:
         "duration_seconds": movie.duration_seconds,
         "file_size": movie.file_size,
         "resolution": movie.resolution,
+        "first_frame_resolution": movie.first_frame_resolution,
         "is_available": movie.is_available,
     }
     return {
@@ -160,7 +201,8 @@ def upload_video(
         title, year = title_from_filename(path_name)
         movie = Movie(title=title or path_name.stem, release_year=year, relative_path=name,
                       file_size=stat.st_size, file_mtime_ns=stat.st_mtime_ns,
-                      file_extension=path_name.suffix.lower(), resolution=resolution_from_filename(path_name))
+                      file_extension=path_name.suffix.lower(), resolution=resolution_from_filename(path_name),
+                      first_frame_resolution=first_frame_resolution(destination, settings.ffmpeg_path))
         session.add(movie)
         session.commit()
         session.refresh(movie)

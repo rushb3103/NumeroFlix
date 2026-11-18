@@ -4,7 +4,7 @@ from sqlmodel import select
 
 from app.core.config import Settings, get_settings
 from app.main import app
-from app.models import Movie, Tag, WatchProgress
+from app.models import Collection, Movie, Tag, WatchProgress
 
 
 def test_health_and_tag_crud(test_context):
@@ -15,6 +15,35 @@ def test_health_and_tag_crud(test_context):
     tag_id = created.json()["id"]
     assert client.put(f"/api/tags/{tag_id}", json={"name": "Cozy", "color": "#334455"}).status_code == 200
     assert client.delete(f"/api/tags/{tag_id}").status_code == 204
+
+
+def test_library_analytics_counts_available_videos_and_storage(test_context):
+    client, session, _ = test_context
+    drama, archive = Collection(name="Drama"), Collection(name="Archive")
+    hd, indie = Tag(name="HD"), Tag(name="Indie")
+    session.add_all([
+        Movie(title="Assigned", relative_path="assigned.mp4", file_size=3_000_000_000,
+              first_frame_resolution="1920x1080", collections=[drama, archive], tags=[hd, indie]),
+        Movie(title="Unassigned", relative_path="unassigned.mp4", file_size=500_000_000),
+        Movie(title="Missing", relative_path="missing.mp4", file_size=400_000_000,
+              is_available=False, collections=[archive], tags=[hd]),
+        Collection(name="Empty"),
+    ])
+    session.commit()
+    response = client.get("/api/library/analytics")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_videos"] == 2
+    assert data["total_bytes"] == 3_500_000_000
+    assert {row["name"]: (row["video_count"], row["size_bytes"]) for row in data["resolutions"]} == {
+        "1920x1080": (1, 3_000_000_000), "Unknown": (1, 500_000_000),
+    }
+    assert {row["name"]: row["video_count"] for row in data["categories"]} == {
+        "Archive": 1, "Drama": 1, "Empty": 0, "Uncategorized": 1,
+    }
+    assert {row["name"]: row["size_bytes"] for row in data["tags"]} == {
+        "HD": 3_000_000_000, "Indie": 3_000_000_000, "Untagged": 500_000_000,
+    }
 
 
 def test_search_filters_and_progress(test_context):

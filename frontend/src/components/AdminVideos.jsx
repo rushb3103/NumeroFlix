@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../services/api'
 
-export default function AdminVideos() {
+export default function AdminVideos({ scanRevision }) {
   const [files, setFiles] = useState([])
   const [uploads, setUploads] = useState([])
   const [busy, setBusy] = useState(false)
@@ -16,11 +16,16 @@ export default function AdminVideos() {
     let active = true
     const timer = setTimeout(() => {
       api.get('/movies', {params: {search: search || undefined, page, page_size: 12}})
-        .then(({data}) => { if (active) setResult(data) })
+        .then(({data}) => {
+          if (!active) return
+          setResult(data)
+          const lastPage = Math.max(1, Math.ceil(data.total / data.page_size))
+          if (page > lastPage) setPage(lastPage)
+        })
         .catch(() => { if (active) setError('Could not load videos.') })
     }, 200)
     return () => { active = false; clearTimeout(timer) }
-  }, [search, page, revision])
+  }, [search, page, revision, scanRevision])
   const upload = async event => {
     event.preventDefault()
     if (!files.length || busy) return
@@ -73,8 +78,8 @@ export default function AdminVideos() {
     } catch (err) { setError(err.response?.data?.detail || 'Could not delete the video.') }
     finally { setBusy(false) }
   }
-  return <section className="mt-6 rounded-xl border border-zinc-800 bg-panel p-6"><h2 className="text-lg font-semibold">Manage videos</h2><p className="mt-1 text-sm text-zinc-400">Upload to the library root or permanently delete a video and its source file.</p>
-    <form onSubmit={upload} className="mt-4 flex flex-wrap items-center gap-3"><label className="text-sm text-zinc-300">Video files <input type="file" multiple disabled={busy} accept=".mp4,.mkv,.avi,.mov,.webm,.m4v" onChange={event => { setFiles(Array.from(event.target.files)); setUploads([]); setNotice(''); setError('') }} className="mt-2 block max-w-full text-sm text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-700 file:px-3 file:py-2 file:text-white" /></label><button className="button" disabled={!files.length || busy}>{busy ? 'Uploading…' : `Upload ${files.length > 1 ? `${files.length} videos` : 'video'}`}</button></form>
+  return <section className="mt-6 rounded-xl border border-zinc-800 bg-panel p-4 sm:p-6"><h2 className="text-lg font-semibold">Manage videos</h2><p className="mt-1 text-sm text-zinc-400">Upload to the library root or permanently delete a video and its source file.</p>
+    <form onSubmit={upload} className="mt-4 flex flex-wrap items-center gap-3"><label className="min-w-0 max-w-full text-sm text-zinc-300">Video files <input type="file" multiple disabled={busy} accept=".mp4,.mkv,.avi,.mov,.webm,.m4v" onChange={event => { setFiles(Array.from(event.target.files)); setUploads([]); setNotice(''); setError('') }} className="mt-2 block max-w-full text-sm text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-700 file:px-3 file:py-2 file:text-white" /></label><button className="button" disabled={!files.length || busy}>{busy ? 'Uploading…' : `Upload ${files.length > 1 ? `${files.length} videos` : 'video'}`}</button></form>
     {uploads.length > 0 && <ul aria-live="polite" className="mt-4 divide-y divide-zinc-800 rounded-lg border border-zinc-800">{uploads.map((item, index) => <li key={`${index}-${item.name}`} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"><span className="min-w-0 break-all text-zinc-300">{item.name}</span><span className={item.status === 'Failed' || item.status === 'Not uploaded' ? 'text-red-300' : item.status === 'Added' ? 'text-emerald-400' : 'text-zinc-400'}>{item.status}{item.status === 'Uploading' ? ` ${item.progress}%` : ''}{item.message ? `: ${item.message}` : ''}</span></li>)}</ul>}
     {error && <p role="alert" className="mt-4 text-sm text-red-300">{error}</p>}{notice && <p role="status" className="mt-4 text-sm text-emerald-400">{notice}</p>}
     <div className="mt-7 flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">Library videos <span className="text-sm font-normal text-zinc-500">({result.total})</span></h3><input value={search} onChange={event => { setSearch(event.target.value); setPage(1) }} className="control" placeholder="Search videos" aria-label="Search videos to manage"/></div>

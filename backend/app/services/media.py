@@ -1,6 +1,24 @@
 import json
+import re
 import subprocess
 from pathlib import Path
+
+
+def first_frame_resolution(path: Path, ffmpeg_path: str) -> str | None:
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg_path, "-nostdin", "-v", "info", "-noautorotate", "-i", str(path),
+                "-map", "0:V:0", "-vf", "showinfo", "-frames:v", "1", "-f", "null", "-",
+            ],
+            capture_output=True,
+            timeout=30,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    frame = re.search(rb"\[Parsed_showinfo_\d+ [^\]]+\]\s+n:\s*0\s+[^\r\n]*?\bs:(\d+x\d+)\b", result.stderr)
+    return frame[1].decode("ascii") if frame else None
 
 
 def inspect_media(path: Path, ffprobe_path: str) -> dict[str, str | float | None]:
